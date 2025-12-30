@@ -1,7 +1,7 @@
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { readFile } from 'fs/promises';
-import { join, extname } from 'path';
+import express from 'express';
+import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import * as GameRulesModule from '../shared/rules';
@@ -26,11 +26,16 @@ console.log('[Server] Environment:', process.env.NODE_ENV || 'development');
 console.log('[Server] 🔍 GameRules type:', typeof GameRules);
 console.log('[Server] 🔍 GameRules keys:', GameRules ? Object.keys(GameRules) : 'undefined');
 
-const httpServer = createServer(async (req, res) => {
-  // リクエストのOriginヘッダを取得
-  const origin = req.headers.origin || req.headers.referer?.split('/').slice(0, 3).join('/') || '';
-  
-  // CORSを許可するオリジンを確認
+// Express アプリケーションの作成
+const app = express();
+const httpServer = createServer(app);
+
+// ミドルウェア設定
+app.use(express.json());
+
+// CORS設定
+app.use((req, res, next) => {
+  const origin = req.headers.origin || '';
   const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:3000',
@@ -38,163 +43,115 @@ const httpServer = createServer(async (req, res) => {
     'http://127.0.0.1:3000'
   ];
   
-  // GitHub Codespacesの動的ドメイン対応
   const isCodespacesOrigin = origin.includes('app.github.dev');
   const isAllowedOrigin = allowedOrigins.includes(origin);
   
-  if (isCodespacesOrigin || isAllowedOrigin) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
+  if (isCodespacesOrigin || isAllowedOrigin || origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
   }
   
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  
-  // キャッシュ対策
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
-
-  // OPTIONSリクエストへの対応（プリフライト）
+  
   if (req.method === 'OPTIONS') {
-    res.writeHead(204, { 'Content-Type': 'text/plain' });
-    res.end();
-    return;
+    return res.sendStatus(204);
   }
+  
+  next();
+});
 
-  if (req.url === '/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true }));
-    return;
-  }
+// ヘルスチェックエンドポイント
+app.get('/health', (req, res) => {
+  res.json({ ok: true });
+});
 
-  // AI技生成エンドポイント
-  if (req.url === '/api/generate-skill' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => { body += chunk.toString(); });
-    req.on('end', async () => {
-      try {
-        const { prompt } = JSON.parse(body);
-        
-        // OpenAI API呼び出し（APIキーは環境変数から取得）
-        const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-        if (!OPENAI_API_KEY) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'OpenAI API key not configured' }));
-          return;
-        }
-
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${OPENAI_API_KEY}`
-          },
-          body: JSON.stringify({
-            model: 'gpt-3.5-turbo',
-            messages: [
-              {
-                role: 'system',
-                content: 'あなたはゴッドフィールド風のカードゲームの技を生成するAIです。面白くて強力な技名と効果を日本語で作成してください。'
-              },
-              {
-                role: 'user',
-                content: prompt || 'ゴッドフィールド風の面白い技名と効果を1つJSONで返して。フォーマット: {"name": "技名", "cost": 2-5の数値, "effect": "効果説明", "attack": 0-30の数値, "defense": 0-20の数値}'
-              }
-            ],
-            temperature: 0.9,
-            max_tokens: 200
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error(`OpenAI API error: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        const content = data.choices[0]?.message?.content;
-        
-        // JSON抽出（GPTが余計なテキストを返す場合に対応）
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-          throw new Error('Invalid JSON response from AI');
-        }
-        
-        const skillData = JSON.parse(jsonMatch[0]);
-        
-        // Card型に整形（必須フィールドにデフォルトを補完）
-        const baseAttack = Math.max(0, Math.min(30, skillData.attack || 0));
-        const baseDefense = Math.max(0, Math.min(20, skillData.defense || 0));
-        const baseCost = Math.max(1, Math.min(5, skillData.cost || 3));
-        const value = Math.max(1, Math.min(50, baseAttack + baseDefense + baseCost * 2));
-        const card: Card = {
-          id: `ai-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          name: skillData.name || '錬成されし技',
-          type: 'miracle',
-          category: 'miracle',
-          value,
-          cost: baseCost,
-          element: 'none',
-          description: skillData.effect || '神秘的な効果を発動する',
-          effect: skillData.effect || '神秘的な効果を発動する',
-          attack: baseAttack,
-          defense: baseDefense
-        };
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ card }));
-      } catch (error) {
-        console.error('[Server] Error generating skill:', error);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ 
-          error: 'Failed to generate skill',
-          details: error instanceof Error ? error.message : 'Unknown error'
-        }));
-      }
-    });
-    return;
-  }
-
-  // 静的ファイル配信（SPA対応）
+// AI技生成エンドポイント
+app.post('/api/generate-skill', async (req, res) => {
   try {
-    // クライアントのdistディレクトリパス（コンパイル後はserver/dist/server/index.jsから見る）
-    const clientDistPath = join(__dirname, '../../../client/dist');
+    const { prompt } = req.body;
     
-    // URLパスからファイルパスを取得
-    let filePath = join(clientDistPath, req.url === '/' ? 'index.html' : req.url!);
-    
-    // ファイルの存在確認とMIMEタイプの設定
-    const mimeTypes: Record<string, string> = {
-      '.html': 'text/html',
-      '.js': 'application/javascript',
-      '.css': 'text/css',
-      '.json': 'application/json',
-      '.png': 'image/png',
-      '.jpg': 'image/jpeg',
-      '.gif': 'image/gif',
-      '.svg': 'image/svg+xml',
-      '.ico': 'image/x-icon'
-    };
-    
-    const ext = extname(filePath).toLowerCase();
-    const contentType = mimeTypes[ext] || 'application/octet-stream';
-    
-    try {
-      const content = await readFile(filePath);
-      res.writeHead(200, { 'Content-Type': contentType });
-      res.end(content);
-    } catch (fileErr) {
-      // ファイルが見つからない場合はSPAなのでindex.htmlを返す
-      const indexPath = join(clientDistPath, 'index.html');
-      const indexContent = await readFile(indexPath);
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(indexContent);
+    const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+    if (!OPENAI_API_KEY) {
+      return res.status(500).json({ error: 'OpenAI API key not configured' });
     }
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          {
+            role: 'system',
+            content: 'あなたはゴッドフィールド風のカードゲームの技を生成するAIです。面白くて強力な技名と効果を日本語で作成してください。'
+          },
+          {
+            role: 'user',
+            content: prompt || 'ゴッドフィールド風の面白い技名と効果を1つJSONで返して。フォーマット: {"name": "技名", "cost": 2-5の数値, "effect": "効果説明", "attack": 0-30の数値, "defense": 0-20の数値}'
+          }
+        ],
+        temperature: 0.9,
+        max_tokens: 200
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices[0]?.message?.content;
+    
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('Invalid JSON response from AI');
+    }
+    
+    const skillData = JSON.parse(jsonMatch[0]);
+    
+    const baseAttack = Math.max(0, Math.min(30, skillData.attack || 0));
+    const baseDefense = Math.max(0, Math.min(20, skillData.defense || 0));
+    const baseCost = Math.max(1, Math.min(5, skillData.cost || 3));
+    const value = Math.max(1, Math.min(50, baseAttack + baseDefense + baseCost * 2));
+    const card: Card = {
+      id: `ai-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name: skillData.name || '錬成されし技',
+      type: 'miracle',
+      category: 'miracle',
+      value,
+      cost: baseCost,
+      element: 'none',
+      description: skillData.effect || '神秘的な効果を発動する',
+      effect: skillData.effect || '神秘的な効果を発動する',
+      attack: baseAttack,
+      defense: baseDefense
+    };
+
+    res.json({ card });
   } catch (error) {
-    console.error('[Server] Static file error:', error);
-    res.writeHead(500, { 'Content-Type': 'text/plain' });
-    res.end('Internal Server Error');
+    console.error('[Server] Error generating skill:', error);
+    res.status(500).json({ 
+      error: 'Failed to generate skill',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
+});
+
+// 静的ファイルの配信（クライアントのビルド済みファイル）
+const clientDistPath = join(__dirname, '../../../client/dist');
+console.log('[Server] 📁 Static files path:', clientDistPath);
+app.use(express.static(clientDistPath));
+
+// SPA対応：すべてのルートでindex.htmlを返す（Socket.IOパスを除外）
+app.get(/^(?!\/socket\.io).*$/, (req, res) => {
+  res.sendFile(join(clientDistPath, 'index.html'));
 });
 
 // GitHub Codespaces環境に特化したSocket.IO設定

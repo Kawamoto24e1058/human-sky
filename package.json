@@ -3,10 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "install:client": "npm install --prefix client",
-    "build:client": "npm run build --prefix client",
+    "build": "npm install && cd client && npm install && npm run build && cd .. && npm run build:server",
     "build:server": "npm run build --prefix server",
-    "build": "npm run install:client && npm run build:client && npm run build:server",
     "build:verify": "echo '🔍 Verifying build outputs...' && echo '📂 Client dist contents:' && ls -R client/dist/ && echo '📂 Server dist contents:' && ls -R server/dist/ && echo '✅ Build verification complete'",
     "start": "cd server && npm start"
   }

@@ -145,37 +145,31 @@ app.post('/api/generate-skill', async (req, res) => {
 });
 
 // 静的ファイルの配信（クライアントのビルド済みファイル）
-// Render環境でも確実に動作するように、複数のパス候補を試す
+// 固定パスに依存せず、候補を総当たりで探索する
 const findClientDist = (): string => {
-  const candidates = [
-    // 最優先: serverディレクトリから1つ上がってclient/dist（Render対応）
-    // Renderでは process.cwd() = /opt/render/project/src/server/ なので1つ上に
-    join(process.cwd(), '..', 'client', 'dist'),
-    // フォールバック1: プロジェクトルートから直接（ルートで実行される場合）
-    join(process.cwd(), 'client', 'dist'),
-    // フォールバック2: __dirnameから3階層上（開発環境コンパイル済み）
-    join(__dirname, '../../../client/dist'),
-    // フォールバック3: process.cwd()の親ディレクトリから
-    join(dirname(process.cwd()), 'client', 'dist')
+  const candidateFiles = [
+    join(process.cwd(), 'client', 'dist', 'index.html'),
+    join(process.cwd(), 'dist', 'client', 'index.html'),
+    join(__dirname, '..', '..', 'client', 'dist', 'index.html')
   ];
-  
-  console.log('[Server] 🔍 Searching for client/dist in:');
+
+  console.log('[Server] 🔍 Searching for index.html in candidates:');
   console.log('[Server] 📂 process.cwd():', process.cwd());
   console.log('[Server] 📂 __dirname:', __dirname);
-  
-  // 最初に見つかったindex.htmlが存在するパスを使用
-  for (const candidate of candidates) {
-    const indexPath = join(candidate, 'index.html');
-    console.log(`  - Checking: ${candidate}`);
-    if (existsSync(indexPath)) {
-      console.log('[Server] ✅ Found client dist at:', candidate);
-      return candidate;
+
+  for (const filePath of candidateFiles) {
+    console.log(`  - Checking: ${filePath}`);
+    if (existsSync(filePath)) {
+      const dir = dirname(filePath);
+      console.log('[Server] ✅ Found index.html at:', filePath);
+      console.log('[Server] 📁 Using static dir:', dir);
+      return dir;
     }
   }
-  
-  // どれも見つからない場合は最初の候補を返す（エラーメッセージのため）
-  console.error('[Server] ⚠️ Could not find client dist. Tried:', candidates);
-  return candidates[0];
+
+  console.error('[Server] ⚠️ Could not find index.html. Tried:', candidateFiles);
+  // デフォルトは最初の候補のディレクトリ
+  return dirname(candidateFiles[0]);
 };
 
 const clientDistPath = findClientDist();

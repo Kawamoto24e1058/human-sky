@@ -3,10 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "npm run build:client && npm run build:server && npm run build:verify",
-    "build:client": "cd client && npm install && npm run build && echo '✅ Client build complete' && ls -la dist/",
-    "build:server": "cd server && npm install && npm run build && echo '✅ Server build complete'",
-    "build:verify": "echo '🔍 Verifying build outputs...' && ls -la client/dist/ && ls -la server/dist/server/",
+    "build": "npm install --prefix client && npm run build --prefix client && npm install --prefix server && npm run build --prefix server && npm run build:verify",
+    "build:verify": "echo '🔍 Verifying build outputs...' && echo '📂 Client dist contents:' && ls -R client/dist/ && echo '📂 Server dist contents:' && ls -R server/dist/ && echo '✅ Build verification complete'",
     "start": "cd server && npm start"
   }
 }

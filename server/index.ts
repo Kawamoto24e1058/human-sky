@@ -148,17 +148,20 @@ app.post('/api/generate-skill', async (req, res) => {
 // Render環境でも確実に動作するように、複数のパス候補を試す
 const findClientDist = (): string => {
   const candidates = [
-    // 最優先: プロジェクトルートからの絶対パス（Render対応）
-    join(process.cwd(), 'client', 'dist'),
-    // フォールバック1: server ディレクトリから1つ上がってからclient/dist
+    // 最優先: serverディレクトリから1つ上がってclient/dist（Render対応）
+    // Renderでは process.cwd() = /opt/render/project/src/server/ なので1つ上に
     join(process.cwd(), '..', 'client', 'dist'),
-    // フォールバック2: __dirnameから3階層上（開発環境用）
+    // フォールバック1: プロジェクトルートから直接（ルートで実行される場合）
+    join(process.cwd(), 'client', 'dist'),
+    // フォールバック2: __dirnameから3階層上（開発環境コンパイル済み）
     join(__dirname, '../../../client/dist'),
-    // フォールバック3: process.cwd()からの相対パス
+    // フォールバック3: process.cwd()の親ディレクトリから
     join(dirname(process.cwd()), 'client', 'dist')
   ];
   
   console.log('[Server] 🔍 Searching for client/dist in:');
+  console.log('[Server] 📂 process.cwd():', process.cwd());
+  console.log('[Server] 📂 __dirname:', __dirname);
   
   // 最初に見つかったindex.htmlが存在するパスを使用
   for (const candidate of candidates) {
@@ -172,8 +175,6 @@ const findClientDist = (): string => {
   
   // どれも見つからない場合は最初の候補を返す（エラーメッセージのため）
   console.error('[Server] ⚠️ Could not find client dist. Tried:', candidates);
-  console.error('[Server] 📂 Current working directory:', process.cwd());
-  console.error('[Server] 📂 __dirname:', __dirname);
   return candidates[0];
 };
 

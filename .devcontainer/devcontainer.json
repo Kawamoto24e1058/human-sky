@@ -1,0 +1,29 @@
+{
+  "name": "Human Sky Game",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "forwardPorts": [3001, 5173],
+  "portsAttributes": {
+    "3001": {
+      "label": "Game Server (Socket.IO)",
+      "visibility": "public",
+      "onAutoForward": "public",
+      "protocol": "https"
+    },
+    "5173": {
+      "label": "Vite Dev Server",
+      "visibility": "public",
+      "onAutoForward": "public",
+      "protocol": "https"
+    }
+  },
+  "postCreateCommand": "cd client && npm install && cd ../server && npm install",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss"
+      ]
+    }
+  }
+}

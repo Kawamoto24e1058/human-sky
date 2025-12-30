@@ -148,19 +148,22 @@ app.post('/api/generate-skill', async (req, res) => {
 // Render環境でも確実に動作するように、複数のパス候補を試す
 const findClientDist = (): string => {
   const candidates = [
-    // Render/本番環境: リポジトリルートから見たパス
-    join(process.cwd(), 'client/dist'),
-    // 開発環境: server/dist/server/index.jsから見た相対パス
+    // 最優先: プロジェクトルートからの絶対パス（Render対応）
+    join(process.cwd(), 'client', 'dist'),
+    // フォールバック1: server ディレクトリから1つ上がってからclient/dist
+    join(process.cwd(), '..', 'client', 'dist'),
+    // フォールバック2: __dirnameから3階層上（開発環境用）
     join(__dirname, '../../../client/dist'),
-    // フォールバック1: ルートdist内にclient/distがコピーされている場合
-    join(process.cwd(), 'dist/client'),
-    // フォールバック2: 同階層にclient/distがある場合
-    join(dirname(process.cwd()), 'client/dist')
+    // フォールバック3: process.cwd()からの相対パス
+    join(dirname(process.cwd()), 'client', 'dist')
   ];
+  
+  console.log('[Server] 🔍 Searching for client/dist in:');
   
   // 最初に見つかったindex.htmlが存在するパスを使用
   for (const candidate of candidates) {
     const indexPath = join(candidate, 'index.html');
+    console.log(`  - Checking: ${candidate}`);
     if (existsSync(indexPath)) {
       console.log('[Server] ✅ Found client dist at:', candidate);
       return candidate;
@@ -169,13 +172,13 @@ const findClientDist = (): string => {
   
   // どれも見つからない場合は最初の候補を返す（エラーメッセージのため）
   console.error('[Server] ⚠️ Could not find client dist. Tried:', candidates);
+  console.error('[Server] 📂 Current working directory:', process.cwd());
+  console.error('[Server] 📂 __dirname:', __dirname);
   return candidates[0];
 };
 
 const clientDistPath = findClientDist();
-console.log('[Server] 📁 Static files path:', clientDistPath);
-console.log('[Server] 🔍 __dirname:', __dirname);
-console.log('[Server] 🔍 process.cwd():', process.cwd());
+console.log('[Server] 📁 Final static files path:', clientDistPath);
 
 // 静的ファイルの提供
 app.use(express.static(clientDistPath, {

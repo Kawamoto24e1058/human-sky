@@ -145,13 +145,30 @@ app.post('/api/generate-skill', async (req, res) => {
 });
 
 // 静的ファイルの配信（クライアントのビルド済みファイル）
-const clientDistPath = join(__dirname, '../../../client/dist');
+// 開発環境と本番環境の両方で動作するよう絶対パスで解決
+const clientDistPath = process.env.NODE_ENV === 'production'
+  ? join(__dirname, '../../../client/dist')
+  : join(__dirname, '../../../client/dist');
+
 console.log('[Server] 📁 Static files path:', clientDistPath);
-app.use(express.static(clientDistPath));
+console.log('[Server] 🔍 __dirname:', __dirname);
+
+// 静的ファイルの提供
+app.use(express.static(clientDistPath, {
+  index: false,  // index.htmlは明示的に処理
+  fallthrough: true
+}));
 
 // SPA対応：すべてのルートでindex.htmlを返す（Socket.IOパスを除外）
 app.get(/^(?!\/socket\.io).*$/, (req, res) => {
-  res.sendFile(join(clientDistPath, 'index.html'));
+  const indexPath = join(clientDistPath, 'index.html');
+  console.log('[Server] 📄 Serving index.html from:', indexPath);
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      console.error('[Server] ❌ Error serving index.html:', err);
+      res.status(500).send('Failed to load application');
+    }
+  });
 });
 
 // GitHub Codespaces環境に特化したSocket.IO設定

@@ -51,6 +51,7 @@ export default defineConfig({
     include: ['socket.io-client', 'debug']  // CommonJS依存関係を事前バンドル
   },
   build: {
+    outDir: 'dist',
     commonjsOptions: {
       transformMixedEsModules: true  // ESM/CommonJS混在モジュールの変換を有効化
     }

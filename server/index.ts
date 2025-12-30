@@ -145,35 +145,15 @@ app.post('/api/generate-skill', async (req, res) => {
 });
 
 // 静的ファイルの配信（クライアントのビルド済みファイル）
-// 固定パスに依存せず、候補を総当たりで探索する
-const findClientDist = (): string => {
-  const candidateFiles = [
-    join(process.cwd(), 'client', 'dist', 'index.html'),
-    join(process.cwd(), 'dist', 'client', 'index.html'),
-    join(__dirname, '..', '..', 'client', 'dist', 'index.html')
-  ];
+const clientDistPath = join(process.cwd(), 'client', 'dist');
+const clientIndexPath = join(clientDistPath, 'index.html');
 
-  console.log('[Server] 🔍 Searching for index.html in candidates:');
-  console.log('[Server] 📂 process.cwd():', process.cwd());
-  console.log('[Server] 📂 __dirname:', __dirname);
+console.log('[Server] 🔍 process.cwd():', process.cwd());
+console.log('[Server] 📁 Using client dist:', clientDistPath);
 
-  for (const filePath of candidateFiles) {
-    console.log(`  - Checking: ${filePath}`);
-    if (existsSync(filePath)) {
-      const dir = dirname(filePath);
-      console.log('[Server] ✅ Found index.html at:', filePath);
-      console.log('[Server] 📁 Using static dir:', dir);
-      return dir;
-    }
-  }
-
-  console.error('[Server] ⚠️ Could not find index.html. Tried:', candidateFiles);
-  // デフォルトは最初の候補のディレクトリ
-  return dirname(candidateFiles[0]);
-};
-
-const clientDistPath = findClientDist();
-console.log('[Server] 📁 Final static files path:', clientDistPath);
+if (!existsSync(clientIndexPath)) {
+  console.error('[Server] ⚠️ index.html not found at:', clientIndexPath);
+}
 
 // 静的ファイルの提供
 app.use(express.static(clientDistPath, {

@@ -1,9 +1,16 @@
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import { readFile } from 'fs/promises';
+import { join, extname } from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 import * as GameRulesModule from '../shared/rules';
 import * as CardMasterModule from '../shared/cardMaster';
 import * as CardsModule from '../shared/cards';
 import type { GameState, PlayCardPayload, Player, Card } from '../shared/types';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // ESM/CommonJS interop helper
 const GameRules = GameRulesModule;
@@ -148,8 +155,46 @@ const httpServer = createServer(async (req, res) => {
     return;
   }
 
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('socket-server');
+  // 静的ファイル配信（SPA対応）
+  try {
+    // クライアントのdistディレクトリパス（コンパイル後はserver/dist/server/index.jsから見る）
+    const clientDistPath = join(__dirname, '../../../client/dist');
+    
+    // URLパスからファイルパスを取得
+    let filePath = join(clientDistPath, req.url === '/' ? 'index.html' : req.url!);
+    
+    // ファイルの存在確認とMIMEタイプの設定
+    const mimeTypes: Record<string, string> = {
+      '.html': 'text/html',
+      '.js': 'application/javascript',
+      '.css': 'text/css',
+      '.json': 'application/json',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.svg': 'image/svg+xml',
+      '.ico': 'image/x-icon'
+    };
+    
+    const ext = extname(filePath).toLowerCase();
+    const contentType = mimeTypes[ext] || 'application/octet-stream';
+    
+    try {
+      const content = await readFile(filePath);
+      res.writeHead(200, { 'Content-Type': contentType });
+      res.end(content);
+    } catch (fileErr) {
+      // ファイルが見つからない場合はSPAなのでindex.htmlを返す
+      const indexPath = join(clientDistPath, 'index.html');
+      const indexContent = await readFile(indexPath);
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(indexContent);
+    }
+  } catch (error) {
+    console.error('[Server] Static file error:', error);
+    res.writeHead(500, { 'Content-Type': 'text/plain' });
+    res.end('Internal Server Error');
+  }
 });
 
 // GitHub Codespaces環境に特化したSocket.IO設定

@@ -1,0 +1,11 @@
+{
+  "name": "human-sky",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "cd client && npm install && npm run build",
+    "build:server": "cd server && npm install && npm run build",
+    "start": "cd server && npm start"
+  }
+}
